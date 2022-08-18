@@ -1,0 +1,17 @@
+{
+  "rutracker": {
+    "user": "кириллица",
+    "password": "тест"
+  },
+  "qbt": {
+    "clients": [
+      {
+        "host": "192.168.1.2",
+        "port": "8080",
+        "login": "admin",
+        "password": "password"
+      }
+    ]
+  },
+  "proxy": "socks5h://gateway.keeps.cyou:2081"
+}
