@@ -12,6 +12,7 @@ debug = False
 if debug:
     http_client.HTTPConnection.debuglevel = 1
 
+# noinspection PyUnresolvedReferences
 requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -36,11 +37,11 @@ def rutracker_auth(config):
     return session
 
 
-def download_torrent(torrend_id, session):
-    url = "https://rutracker.org/forum/dl.php?t=" + torrend_id
+def download_torrent(torrent_id, session):
+    url = "https://rutracker.org/forum/dl.php?t=" + torrent_id
     headers = {'User-Agent': 'Mozilla/5.0'}
     resp = session.get(url, allow_redirects=True, headers=headers)
-    with open(torrend_id + '.torrent', 'wb') as torr_file:
+    with open(torrent_id + '.torrent', 'wb') as torr_file:
         for chunk in resp.iter_content(chunk_size=1024):
             torr_file.write(chunk)
             torr_file.flush()
@@ -52,7 +53,7 @@ def get_topic_data(external_torrent_id, session):
     try:
         resp = session.get(url, allow_redirects=True, verify=False)
     except:
-        print("Cant proccess id: ", external_torrent_id)
+        print("Cant process id: ", external_torrent_id)
         return ''
     topic_data = json.loads(resp.content.decode("utf-8"))
     try:
@@ -67,37 +68,69 @@ def get_torrent_cat(forum_id, session):
     try:
         resp = session.get(url, allow_redirects=True, verify=False)
     except:
-        print("Cant proccess id: ", forum_id)
+        print("Cant process id: ", forum_id)
         return ''
+
     category = json.loads(resp.content.decode("utf-8"))
     category_name = category['result'][str(forum_id)]['forum_name']
     return category_name
 
 
-def proccess_torrent(torrent, qbt_client, session):
+def process_torrent(torrent: qbittorrentapi.TorrentDictionary, qbt_client: qbittorrentapi.Client,
+                    session: requests.Session, config):
     torrent_info = qbt_client.torrents_properties(torrent.hash)
     torrent_external_id = torrent_info.comment.split("=")[-1]
     print(torrent.name, ":\n\tPath:", torrent.save_path, "\n\tExternal id:", torrent_external_id)
 
     download_torrent(torrent_external_id, session)
-    topic_data_id = get_topic_data(torrent_external_id, session)
-    if not topic_data_id:
-        return False
-    category_name = get_torrent_cat(topic_data_id, session)
-    qbt_client.torrents_add(torrent_files="./" + torrent_external_id + '.torrent', save_path=torrent.save_path,
-                            category=category_name)
-    os.remove("./" + torrent_external_id + '.torrent')
+    category_name = torrent.get("category")
+    if not category_name:
+        topic_data_id = get_topic_data(torrent_external_id, session)
+        if not topic_data_id:
+            return False
+        category_name = get_torrent_cat(topic_data_id, session)
+
+    if config["dry_run"]:
+        print("\t(dry run) add torrent: " + torrent.name)
+    else:
+        qbt_client.torrents_add(torrent_files="./" + torrent_external_id + '.torrent',
+                                save_path=torrent.save_path,
+                                category=category_name)
+        os.remove("./" + torrent_external_id + '.torrent')
     return True
 
 
-def check_torrent_registration(torrent, qbt_client):
-    torrent_info_list = qbt_client.torrents_trackers(torrent.hash)
-    for torrent_info in torrent_info_list:
-        torrent_dict = dict(torrent_info)
-        logging.info(torrent_dict)
-        if torrent_dict["msg"] == "Torrent not registered":
-            print("Found unregistered torrent: ", torrent.name)
-            return torrent
+def check_torrent_registration(torrent: qbittorrentapi.TorrentDictionary, qbt_client: qbittorrentapi.Client,
+                               session: requests.Session):
+    if not torrent.get("infohash_v2"):
+        torrent_trackers_list = qbt_client.torrents_trackers(torrent.hash)
+        for torrent_info in torrent_trackers_list:
+            torrent_dict = dict(torrent_info)
+            logging.info(torrent_dict)
+            if torrent_dict["msg"] == "Torrent not registered":
+                print("Found unregistered torrent: ", torrent.name)
+                return torrent
+    else:  # гибридный торрент, проверим состояние по V1 hash вручную, потому что статус в кубите всегда ошибочный
+        print("Hybrid: " + torrent.name + " check by API")
+        return check_by_api(qbt_client, torrent, session)
+    return None
+
+
+def check_by_api(qbt_client: qbittorrentapi.Client, torrent: qbittorrentapi.TorrentDictionary,
+                 session: requests.Session):
+    torrent_info = qbt_client.torrents_properties(torrent.hash)
+    forum_id = torrent_info.comment.split("=")[-1]
+    url = "http://api.rutracker.org/v1/get_tor_hash?by=topic_id&val=" + forum_id
+    try:
+        resp = session.get(url, allow_redirects=True, verify=False)
+    except:
+        print("Cant process forum_id: ", forum_id)
+        return None
+
+    data = json.loads(resp.content.decode("utf-8"))
+    hash_v1 = torrent.infohash_v1.upper()
+    if hash_v1 != data["result"][forum_id].upper():
+        return torrent
     return None
 
 
@@ -119,15 +152,17 @@ def main():
             qbt_client.auth_log_in()
         except qbittorrentapi.LoginFailed as e:
             print(e)
-        print(f'qBittorrent: {qbt_client.app.version}')
-        print(f'qBittorrent Web API: {qbt_client.app.web_api_version}')
+        print(f'qBittorrent: {qbt_client.app.version} Web API: {qbt_client.app.web_api_version}\n')
         for torrent in qbt_client.torrents_info():
-            unregistered = check_torrent_registration(torrent, qbt_client)
+            unregistered = check_torrent_registration(torrent, qbt_client, session)
             if unregistered:
-                ok = proccess_torrent(torrent, qbt_client, session)
+                ok = process_torrent(torrent, qbt_client, session, config)
                 if ok:
-                    qbt_client.torrents_delete(delete_files=False, torrent_hashes=torrent.hash)
-                    print("Removed old torrent: ", torrent.name)
+                    if config["dry_run"]:
+                        print("\t(dry run) Removed old torrent: ", torrent.name)
+                    else:
+                        qbt_client.torrents_delete(delete_files=False, torrent_hashes=torrent.hash)
+                        print("Removed old torrent: ", torrent.name)
 
 
 if __name__ == '__main__':
