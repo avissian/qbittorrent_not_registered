@@ -80,7 +80,7 @@ def process_torrent(torrent: qbittorrentapi.TorrentDictionary, qbt_client: qbitt
                     session: requests.Session, config):
     torrent_info = qbt_client.torrents_properties(torrent.hash)
     torrent_external_id = torrent_info.comment.split("=")[-1]
-    print(torrent.name, ":\n\tPath:", torrent.save_path, "\n\tExternal id:", torrent_external_id)
+    print("\tPath:", torrent.save_path, "\n\tExternal id:", torrent_external_id)
 
     download_torrent(torrent_external_id, session)
     category_name = torrent.get("category")
@@ -93,10 +93,13 @@ def process_torrent(torrent: qbittorrentapi.TorrentDictionary, qbt_client: qbitt
     if config["dry_run"]:
         print("\t(dry run) add torrent: " + torrent.name)
     else:
-        qbt_client.torrents_add(torrent_files="./" + torrent_external_id + '.torrent',
-                                save_path=torrent.save_path,
-                                category=category_name)
-        os.remove("./" + torrent_external_id + '.torrent')
+        ok = qbt_client.torrents_add(torrent_files="./" + torrent_external_id + '.torrent',
+                                     save_path=torrent.save_path,
+                                     category=category_name)
+        if ok == "Ok.":
+            os.remove("./" + torrent_external_id + '.torrent')
+        else:
+            print("Ошибка добавления торрента " + torrent_external_id + '.torrent')
     return True
 
 
