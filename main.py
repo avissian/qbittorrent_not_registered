@@ -8,6 +8,8 @@ import qbittorrentapi
 import requests
 
 debug = False
+api_url = "http://api.rutracker.org"
+forum_url = "https://rutracker.org"
 
 if debug:
     http_client.HTTPConnection.debuglevel = 1
@@ -33,12 +35,12 @@ def rutracker_auth(config):
 
     session.verify = False
 
-    session.post('https://rutracker.org/forum/login.php', headers=headers, data=payload)
+    session.post(forum_url + "/forum/login.php", headers=headers, data=payload)
     return session
 
 
 def download_torrent(torrent_id, session):
-    url = "https://rutracker.org/forum/dl.php?t=" + torrent_id
+    url = forum_url + "/forum/dl.php?t=" + torrent_id
     headers = {'User-Agent': 'Mozilla/5.0'}
     resp = session.get(url, allow_redirects=True, headers=headers)
     with open(torrent_id + '.torrent', 'wb') as torr_file:
@@ -49,7 +51,7 @@ def download_torrent(torrent_id, session):
 
 
 def get_topic_data(external_torrent_id, session):
-    url = "http://api.rutracker.org/v1/get_tor_topic_data?by=topic_id&val=" + external_torrent_id
+    url = api_url + "/v1/get_tor_topic_data?by=topic_id&val=" + external_torrent_id
     try:
         resp = session.get(url, allow_redirects=True, verify=False)
     except:
@@ -64,7 +66,7 @@ def get_topic_data(external_torrent_id, session):
 
 
 def get_torrent_cat(forum_id, session):
-    url = "http://api.rutracker.org/v1/get_forum_data?by=forum_id&val=" + str(forum_id)
+    url = api_url + "/v1/get_forum_data?by=forum_id&val=" + str(forum_id)
     try:
         resp = session.get(url, allow_redirects=True, verify=False)
     except:
@@ -114,7 +116,7 @@ def check_torrent_registration(torrent: qbittorrentapi.TorrentDictionary, qbt_cl
                 print("Found unregistered torrent: ", torrent.name)
                 return torrent
     else:  # гибридный торрент, проверим состояние по V1 hash вручную, потому что статус в кубите всегда ошибочный
-        print("Hybrid: " + torrent.name + " check by API")
+        # print("Hybrid: " + torrent.name + ", check by API")
         return check_by_api(qbt_client, torrent, session)
     return None
 
@@ -123,7 +125,7 @@ def check_by_api(qbt_client: qbittorrentapi.Client, torrent: qbittorrentapi.Torr
                  session: requests.Session):
     torrent_info = qbt_client.torrents_properties(torrent.hash)
     forum_id = torrent_info.comment.split("=")[-1]
-    url = "http://api.rutracker.org/v1/get_tor_hash?by=topic_id&val=" + forum_id
+    url = api_url + "/v1/get_tor_hash?by=topic_id&val=" + forum_id
     try:
         resp = session.get(url, allow_redirects=True, verify=False)
     except:
@@ -141,6 +143,8 @@ def main():
     with open('config.json', 'r') as f:
         config = json.load(f)
     session = rutracker_auth(config)
+    unregistered_files = []
+    added_files = []
 
     for client in config["qbt"]["clients"]:
         qbt_client = qbittorrentapi.Client(
@@ -156,7 +160,9 @@ def main():
         except qbittorrentapi.LoginFailed as e:
             print(e)
         print(f'qBittorrent: {qbt_client.app.version} Web API: {qbt_client.app.web_api_version}\n')
+        source_hashes = []
         for torrent in qbt_client.torrents_info():
+            source_hashes.append(torrent.hash)  # для поиска добавленных хешей
             unregistered = check_torrent_registration(torrent, qbt_client, session)
             if unregistered:
                 ok = process_torrent(torrent, qbt_client, session, config)
@@ -164,8 +170,21 @@ def main():
                     if config["dry_run"]:
                         print("\t(dry run) Removed old torrent: ", torrent.name)
                     else:
+                        for file in qbt_client.torrents_files(torrent.hash):
+                            unregistered_files.append(file.name)
                         qbt_client.torrents_delete(delete_files=False, torrent_hashes=torrent.hash)
                         print("Removed old torrent: ", torrent.name)
+
+        new_hashes = [x.hash for x in qbt_client.torrents_info() if x.hash not in source_hashes]
+
+        for tor_hash in new_hashes:
+            for file in qbt_client.torrents_files(tor_hash):
+                added_files.append(file.name)
+
+        print('Добавленные файлы:', "\n\t" + "\n\t".join(set(added_files) - set(unregistered_files)))
+        orphans_list = set(unregistered_files) - set(added_files)
+        if len(orphans_list) > 0:
+            print('Файлы без торрентов:', "\n\t" + "\n\t".join(orphans_list))
 
 
 if __name__ == '__main__':
