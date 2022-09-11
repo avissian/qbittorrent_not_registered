@@ -143,10 +143,11 @@ def main():
     with open('config.json', 'r') as f:
         config = json.load(f)
     session = rutracker_auth(config)
-    unregistered_files = []
-    added_files = []
 
     for client in config["qbt"]["clients"]:
+        unregistered_files = []
+        added_files = []
+
         qbt_client = qbittorrentapi.Client(
             host=client["host"],
             port=client["port"],
