@@ -1,7 +1,8 @@
 {
   "rutracker": {
     "user": "кириллица",
-    "password": "тест"
+    "password": "тест",
+    "api_key": "написан в профиле"
   },
   "qbt": {
     "clients": [
