@@ -1,0 +1,28 @@
+{
+  "rutracker": {
+    "user": "кириллица",
+    "password": "тест",
+    "api_key": "написан в профиле",
+    "urls": {
+      "forum": "rutracker.org",
+      "api": "api.rutracker.org"
+    }
+  },
+  "qbt": {
+    "clients": [
+      {
+        "host": "192.168.1.2",
+        "port": "8080",
+        "login": "admin",
+        "password": "password"
+      }
+    ]
+  },
+  "proxy": "socks5h://proxy:2081",
+  "proxy_for_api": false,
+  "dry_run": true,
+  "telegram": {
+    "sender_bot_token": "",
+    "receiver_user_id": "123456"
+  }
+}
