@@ -169,6 +169,7 @@ def main():
                     client_name + ': "Плохие" статусы раздач:',
                     bad_status
                 )
+        print("***")
 
     logging.debug("Выход")
 
