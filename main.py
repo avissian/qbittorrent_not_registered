@@ -118,7 +118,7 @@ def main():
             if tor_api_data:
                 # Перекачиваем только для статусов по списку
                 if tor_api_data.get("tor_status") in [0, 2, 3, 4, 8, 9, 10]:
-                    if tor_api_data.get('info_hash') != torrent.infohash_v1.upper():
+                    if tor_api_data.get('info_hash') != torrent.get('infohash_v1', torrent.hash).upper():
                         logging.debug("Хеш раздачи изменился, перекачаем")
 
                         new_torrents.append(torrent.name)
