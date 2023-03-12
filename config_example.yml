@@ -1,0 +1,28 @@
+dry_run: true # false
+delete lost files: true
+proxy: socks5h://proxy:1080
+proxy_for_api: false
+qbt:
+  clients:
+  - host: 192.168.1.14
+    port: 8080
+    login: admin
+    password: adminadmin
+  - host: 192.168.1.14
+    port: 8081
+    login: admin
+    password: adminadmin
+  - host: 192.168.1.14
+    port: 8082
+    login: admin
+    password: adminadmin
+rutracker:
+  api_key: #
+  user: #
+  password: #
+  urls:
+    api: api.rutracker.org #
+    forum: rutracker.org
+telegram:
+  receiver_user_id:
+  sender_bot_token:
