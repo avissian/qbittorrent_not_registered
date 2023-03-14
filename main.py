@@ -61,7 +61,9 @@ def process_torrent(torrent: qbittorrentapi.TorrentDictionary,
         if ok == "Ok.":
             os.remove(f"./{torrent_id}.torrent")
         else:
-            logging.warning(f"Ошибка добавления торрента {torrent_id}.torrent, статус ответа '{ok}'")
+            msg = f"\t*** Ошибка добавления торрента {torrent_id}.torrent, статус ответа '{ok}'"
+            logging.warning(msg)
+            print(msg)
             return None
     return torrent_files
 
