@@ -235,7 +235,7 @@ def main():
     if config.get("delete lost files"):
         for i in lost_files:
             os.remove(i)
-            msg = f'óÓдалили {i}'
+            msg = f'Удалили {i}'
             logging.info(msg)
             print(msg)
     logging.debug("Выход")
