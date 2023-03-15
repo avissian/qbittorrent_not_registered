@@ -3,6 +3,7 @@ import http.client as http_client
 import json
 import logging
 import os
+import pathlib
 import time
 
 import qbittorrentapi
@@ -44,7 +45,7 @@ def process_torrent(torrent: qbittorrentapi.TorrentDictionary,
 
     file_name = rutracker.download_torrent(torrent_id)
 
-    torrent_files = [os.path.join(torrent.save_path, x) for x in get_file_list(file_name)]
+    torrent_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, x))) for x in get_file_list(file_name)]
 
     # Категория с торрента, или если нет - тема форума
     category_name = torrent.get("category") or forum_categories.get(tor_topic_data.get("forum_id"))
@@ -170,7 +171,7 @@ def main():
                                                     dry_run=config["dry run"],
                                                     )
                         if tor_files:
-                            qbt_files = [os.path.join(torrent.save_path, x.name) for x in qbt_client.torrents_files(torrent.hash)]
+                            qbt_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, x.name))) for x in qbt_client.torrents_files(torrent.hash)]
                             l_lost_files = list(set(qbt_files) - set(tor_files))
                             l_new_files = list(set(tor_files) - set(qbt_files))
                             new_files.extend(l_new_files)
