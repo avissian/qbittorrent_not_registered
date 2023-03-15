@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import pathlib
+import sys
 import time
 
 import qbittorrentapi
@@ -162,7 +163,9 @@ def main():
                     if tor_api_data.get('info_hash') != torrent.get('infohash_v1', torrent.hash).upper():
                         logging.debug("Хеш раздачи изменился, перекачаем")
 
-                        new_torrents.append(f'[{torrent.name}]({torrents_prop[idx].comment})')
+                        new_torrents.append(
+                            '[{name}]({comment})'.format(name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                                                         comment=torrents_prop[idx].comment))
 
                         tor_files = process_torrent(torrent=torrent,
                                                     torrent_id=torrent_id,
@@ -180,8 +183,8 @@ def main():
                             l_new_files = list(set(tor_files) - set(qbt_files))
                             new_files.extend(l_new_files)
                             lost_files.extend(l_lost_files)
-                            print('Lost files:', '\t\n'.join(l_lost_files))
-                            print('New files:', '\t\n'.join(l_new_files))
+                            print('Lost files:\n\t', '\n\t'.join(l_lost_files))
+                            print('New files:\n\t', '\n\t'.join(l_new_files))
                             if config["dry run"]:
                                 logging.warning("\t(dry run) Removed old torrent: %s" % (torrent.name,))
                             else:
@@ -193,9 +196,12 @@ def main():
                     logging.debug(f'Статус торрента {tor_api_data.get("tor_status")} - '
                                   f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
                                   f' имя: {torrent.name}')
+                    tor_name = '[{name}]({comment})'.format(name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                                                            comment=torrents_prop[idx].comment)
                     bad_status.append(f'{tor_api_data.get("tor_status")} - '
                                       f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
-                                      f' имя: [{torrent.name}]({torrents_prop[idx].comment})')
+                                      f' имя: {tor_name}'
+                                      )
             else:
                 msg = f'({torrent.state}) Торрент не найден в ответе API: {torrent.name} {torrents_prop[idx].comment}'  # {torrent.magnet_uri}'
                 logging.info(msg)
