@@ -162,7 +162,7 @@ def main():
                     if tor_api_data.get('info_hash') != torrent.get('infohash_v1', torrent.hash).upper():
                         logging.debug("Хеш раздачи изменился, перекачаем")
 
-                        new_torrents.append(f'({torrent.name})[{torrents_prop[idx].comment}]')
+                        new_torrents.append(f'[{torrent.name}]({torrents_prop[idx].comment})')
 
                         tor_files = process_torrent(torrent=torrent,
                                                     torrent_id=torrent_id,
@@ -195,7 +195,7 @@ def main():
                                   f' имя: {torrent.name}')
                     bad_status.append(f'{tor_api_data.get("tor_status")} - '
                                       f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
-                                      f' имя: ({torrent.name})[{torrents_prop[idx].comment}]')
+                                      f' имя: [{torrent.name}]({torrents_prop[idx].comment})')
             else:
                 msg = f'({torrent.state}) Торрент не найден в ответе API: {torrent.name} {torrents_prop[idx].comment}'  # {torrent.magnet_uri}'
                 logging.info(msg)
