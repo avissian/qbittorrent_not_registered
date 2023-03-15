@@ -37,9 +37,10 @@ def process_torrent(torrent: qbittorrentapi.TorrentDictionary,
                     qbt_client: qbittorrentapi.Client,
                     rutracker: Rutracker,
                     forum_categories: dict,
+                    comment: str,
                     dry_run=False
                     ):
-    msg = "%s\n\tPath: %s\n\tExternal id: %s" % (torrent.name, torrent.save_path, torrent_id)
+    msg = "%s\n\tPath: %s\n\tExternal id: %s\n\t%s" % (torrent.name, torrent.save_path, torrent_id, comment)
     logging.info(msg)
     print(msg)
 
@@ -144,7 +145,8 @@ def main():
 
         # print("Обрабатываем данные от API")
         # Список всех forum_id
-        forum_ids = list(set(str(tor_topic_data.get(x, {}).get("forum_id")) for x in tor_topic_data if tor_topic_data.get(x) and tor_topic_data.get(x, {}).get("forum_id")))
+        forum_ids = list(set(str(tor_topic_data.get(x, {}).get("forum_id")) for x in tor_topic_data if
+                             tor_topic_data.get(x) and tor_topic_data.get(x, {}).get("forum_id")))
         # Категории с форума
         print("Получаем из API данные по категориям")
         forum_categories = rutracker.get_forum_data(forum_ids)
@@ -160,7 +162,7 @@ def main():
                     if tor_api_data.get('info_hash') != torrent.get('infohash_v1', torrent.hash).upper():
                         logging.debug("Хеш раздачи изменился, перекачаем")
 
-                        new_torrents.append(torrent.name)
+                        new_torrents.append(f'({torrent.name})[{torrents_prop[idx].comment}]')
 
                         tor_files = process_torrent(torrent=torrent,
                                                     torrent_id=torrent_id,
@@ -168,10 +170,12 @@ def main():
                                                     qbt_client=qbt_client,
                                                     rutracker=rutracker,
                                                     forum_categories=forum_categories,
+                                                    comment=torrents_prop[idx].comment,
                                                     dry_run=config["dry run"],
                                                     )
                         if tor_files:
-                            qbt_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, x.name))) for x in qbt_client.torrents_files(torrent.hash)]
+                            qbt_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, x.name))) for x in
+                                         qbt_client.torrents_files(torrent.hash)]
                             l_lost_files = list(set(qbt_files) - set(tor_files))
                             l_new_files = list(set(tor_files) - set(qbt_files))
                             new_files.extend(l_new_files)
@@ -191,7 +195,7 @@ def main():
                                   f' имя: {torrent.name}')
                     bad_status.append(f'{tor_api_data.get("tor_status")} - '
                                       f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
-                                      f' имя: {torrent.name}')
+                                      f' имя: ({torrent.name})[{torrents_prop[idx].comment}]')
             else:
                 msg = f'({torrent.state}) Торрент не найден в ответе API: {torrent.name} {torrents_prop[idx].comment}'  # {torrent.magnet_uri}'
                 logging.info(msg)
