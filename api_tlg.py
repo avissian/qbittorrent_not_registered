@@ -5,7 +5,8 @@ def send_tlg_msg(from_bot, to_user, text: str):
     """ Отправка текста в телеграм """
     # пробуем отправить сообщение
     params = {"chat_id": to_user,
-              "text": text}
+              "text": text,
+              "parse_mode": "MarkdownV2"}
     if from_bot:
         response = requests.get(f"https://api.telegram.org/bot{from_bot}/sendMessage", params)
     else:
