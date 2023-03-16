@@ -109,6 +109,7 @@ def main():
     for client in config["qbt"]["clients"]:
         new_torrents = []
         bad_status = []
+        err_torrents = []
         qbt_client = qbittorrentapi.Client(
             host=client["host"],
             port=client["port"],
@@ -162,11 +163,6 @@ def main():
                     if tor_api_data.get('info_hash') != torrent.get('infohash_v1', torrent.hash).upper():
                         logging.debug("Хеш раздачи изменился, перекачаем")
 
-                        new_torrents.append(
-                            '<a href="{comment}">{name}</a>'.format(
-                                name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
-                                comment=torrents_prop[idx].comment))
-
                         tor_files = process_torrent(torrent=torrent,
                                                     torrent_id=torrent_id,
                                                     tor_topic_data=tor_api_data,
@@ -177,6 +173,10 @@ def main():
                                                     dry_run=config["dry run"],
                                                     )
                         if tor_files:
+                            new_torrents.append(
+                                '<a href="{comment}">{name}</a>'.format(
+                                    name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                                    comment=torrents_prop[idx].comment))
                             qbt_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, x.name))) for x in
                                          qbt_client.torrents_files(torrent.hash)]
                             l_lost_files = list(set(qbt_files) - set(tor_files))
@@ -192,6 +192,11 @@ def main():
                                 msg = f"Removed old torrent: {torrent.name}"
                                 logging.info(msg)
                                 print(msg)
+                        else:
+                            err_torrents.append(
+                                '<a href="{comment}">{name}</a>'.format(
+                                    name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                                    comment=torrents_prop[idx].comment))
                 else:
                     logging.debug(f'Статус торрента {tor_api_data.get("tor_status")} - '
                                   f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
@@ -218,6 +223,13 @@ def main():
                     cfg_telegram.get("receiver user_id"),
                     client_name + ": Перекачанные раздачи:",
                     new_torrents
+                )
+            if len(err_torrents):
+                send_tlg(
+                    cfg_telegram.get("sender bot_token"),
+                    cfg_telegram.get("receiver user_id"),
+                    client_name + ": Ошибка при добавлении торрента:",
+                    err_torrents
                 )
             if len(bad_status):
                 send_tlg(
