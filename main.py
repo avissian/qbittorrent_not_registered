@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import pathlib
-import sys
 import time
 
 import qbittorrentapi
@@ -164,8 +163,9 @@ def main():
                         logging.debug("Хеш раздачи изменился, перекачаем")
 
                         new_torrents.append(
-                            '[{name}]({comment})'.format(name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
-                                                         comment=torrents_prop[idx].comment))
+                            '<a href="{comment}">{name}</a>'.format(
+                                name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                                comment=torrents_prop[idx].comment))
 
                         tor_files = process_torrent(torrent=torrent,
                                                     torrent_id=torrent_id,
@@ -196,14 +196,15 @@ def main():
                     logging.debug(f'Статус торрента {tor_api_data.get("tor_status")} - '
                                   f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
                                   f' имя: {torrent.name}')
-                    tor_name = '[{name}]({comment})'.format(name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
-                                                            comment=torrents_prop[idx].comment)
+                    tor_name = '<a href="{comment}">{name}</a>'.format(
+                        name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                        comment=torrents_prop[idx].comment)
                     bad_status.append(f'{tor_api_data.get("tor_status")} - '
                                       f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
                                       f' имя: {tor_name}'
                                       )
             else:
-                msg = f'({torrent.state}) Торрент не найден в ответе API: {torrent.name} {torrents_prop[idx].comment}'  # {torrent.magnet_uri}'
+                msg = f'({torrent.state}) Не найден в ответе API: {torrent.name} * {torrents_prop[idx].comment}'  # {torrent.magnet_uri}'
                 logging.info(msg)
                 print(msg)
 

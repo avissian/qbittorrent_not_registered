@@ -6,7 +6,7 @@ def send_tlg_msg(from_bot, to_user, text: str):
     # пробуем отправить сообщение
     params = {"chat_id": to_user,
               "text": text,
-              "parse_mode": "Markdown"}
+              "parse_mode": "HTML"}
     if from_bot:
         response = requests.get(f"https://api.telegram.org/bot{from_bot}/sendMessage", params)
     else:
