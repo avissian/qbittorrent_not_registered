@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import pathlib
-import time
+from logging import handlers
 
 import qbittorrentapi
 import torrent_parser
@@ -275,7 +275,7 @@ if __name__ == "__main__":
 
     logger.setLevel(logging.DEBUG)
 
-    f_handler = logging.FileHandler("./logs/" + time.strftime("%y%m%d-%H%M.log"), encoding="utf-8")
+    f_handler = handlers.TimedRotatingFileHandler("./logs/log.txt", "D", interval=1, backupCount=7, encoding="utf-8")
     f_formatter = logging.Formatter(u"%(filename)-.10s[Ln:%(lineno)-3d]%(levelname)-8s[%(asctime)s]|%(message)s")
     f_handler.setFormatter(f_formatter)
     f_handler.setLevel(logging.DEBUG)
