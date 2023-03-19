@@ -24,9 +24,10 @@ def get_file_list(torrent_file):
     with open(torrent_file, 'br') as file:
         tor_data = torrent_parser.TorrentFileParser(file).parse()
         # кубит клеит имя раздачи, тоже приклеим для сравнения файлов
-        iname = tor_data.get("info", {}).get("name")
-        for ifile in tor_data.get("info", {}).get("files", []):
-            res.append(os.path.join(iname, *ifile.get("path", [])))
+        info = tor_data.get("info", {})
+        iname = info.get("name.utf-8", info.get("name"))
+        for ifile in info.get("files", []):
+            res.append(os.path.join(iname, *ifile.get("path.utf-8", ifile.get("path", []))))
 
     return res
 
@@ -40,14 +41,13 @@ def process_torrent(torrent: qbittorrentapi.TorrentDictionary,
                     comment: str,
                     dry_run=False
                     ):
-    msg = "%s\n\tPath: %s\n\tExternal id: %s\n\t%s" % (torrent.name, torrent.save_path, torrent_id, comment)
+    msg = "%s\n\tPath: %s\n\t%s" % (torrent.name, torrent.save_path, comment)
     logging.info(msg)
     print(msg)
 
     file_name = rutracker.download_torrent(torrent_id)
-
-    torrent_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, x))) for x in get_file_list(file_name)]
-
+    file_list = get_file_list(file_name)
+    torrent_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, str(x)))) for x in file_list]
     # Категория с торрента, или если нет - тема форума
     category_name = torrent.get("category") or forum_categories.get(tor_topic_data.get("forum_id"))
 
@@ -210,8 +210,10 @@ def main():
                                       )
             else:
                 msg = f'({torrent.state}) Не найден в ответе API: {torrent.name} * {torrents_prop[idx].comment}'  # {torrent.magnet_uri}'
+                if torrent.state_enum.is_complete and torrent_id:
+                    print('!!! вероятно, следующую раздачу можно вытащить из архива или удалить в клиенте !!!')
+                    print(msg)
                 logging.info(msg)
-                print(msg)
 
         # уведомление в телеграм
         cfg_telegram = config.get("telegram")
