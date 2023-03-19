@@ -5,7 +5,8 @@ def send_tlg_msg(from_bot, to_user, text: str):
     """ Отправка текста в телеграм """
     # пробуем отправить сообщение
     params = {"chat_id": to_user,
-              "text": text}
+              "text": text,
+              "parse_mode": "HTML"}
     if from_bot:
         response = requests.get(f"https://api.telegram.org/bot{from_bot}/sendMessage", params)
     else:
@@ -20,7 +21,7 @@ def send_tlg(from_bot, to_user, header_text, msg_set):
     if len(msg_set) > 0 and to_user:
         msg = header_text + "\n"
         for item in msg_set:
-            if len(msg) + len(item) <= 4000:
+            if len(msg.encode('utf-8')) + len(item.encode('utf-8')) + 1 <= 2000:
                 msg += item + "\n"
             else:
                 send_tlg_msg(from_bot, to_user, msg)

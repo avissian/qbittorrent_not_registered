@@ -1,0 +1,28 @@
+dry run: true # true/false - при true не выполняются операции с торрент клиентом
+delete lost files: true # true/false - удалять файлы от старых версий раздач, которые отсутствуют в новой версии. Возможно только при запуске скрипта на компе с кубитом и имеющихся правах на удаление
+proxy: socks5h://proxy:1080 # прокси, указать корректный
+proxy for api: false # true/false - использование прокси для запросов в API
+qbt:
+  clients:
+    - host: 192.168.1.14
+      port: 8080
+      login: admin
+      password: adminadmin
+    - host: 192.168.1.14
+      port: 8081
+      login: admin
+      password: adminadmin
+    - host: 192.168.1.14
+      port: 8082
+      login: admin
+      password: adminadmin
+rutracker:
+  user: # пользователь на форуме
+  password: # пароль на форуме
+  api_key: # Ключ API из профиля
+  urls:
+    api: api.rutracker.org # указать корректный! Данное значение умышленно некорректно
+    forum: rutracker.org
+telegram:
+  receiver user_id: # заполнить для уведомлений в телеграм, можно оставить пустым. Свой ID можно посмотреть в боте https://userinfobot.t.me
+  sender bot_token: # токен бота, который будет отправлять уведомления, можно не указывать, тогда уведомления будут от бота https://PalnB_bot.t.me , бот не умеет писать первым

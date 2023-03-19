@@ -1,10 +1,14 @@
+#!/usr/bin/env python3
 import http.client as http_client
 import json
 import logging
 import os
-import time
+import pathlib
+from logging import handlers
 
 import qbittorrentapi
+import torrent_parser
+import yaml
 
 from api_rt import Rutracker
 from api_tlg import send_tlg
@@ -15,20 +19,35 @@ if debug:
     http_client.HTTPConnection.debuglevel = 1
 
 
+def get_file_list(torrent_file):
+    res = []
+    with open(torrent_file, 'br') as file:
+        tor_data = torrent_parser.TorrentFileParser(file).parse()
+        # кубит клеит имя раздачи, тоже приклеим для сравнения файлов
+        info = tor_data.get("info", {})
+        iname = info.get("name.utf-8", info.get("name"))
+        for ifile in info.get("files", []):
+            res.append(os.path.join(iname, *ifile.get("path.utf-8", ifile.get("path", []))))
+
+    return res
+
+
 def process_torrent(torrent: qbittorrentapi.TorrentDictionary,
                     tor_topic_data: dict,
                     torrent_id: str,
                     qbt_client: qbittorrentapi.Client,
                     rutracker: Rutracker,
                     forum_categories: dict,
+                    comment: str,
                     dry_run=False
                     ):
-    msg = "%s\n\tPath: %s\n\tExternal id: %s" % (torrent.name, torrent.save_path, torrent_id)
+    msg = "%s\n\tPath: %s\n\t%s" % (torrent.name, torrent.save_path, comment)
     logging.info(msg)
     print(msg)
 
     file_name = rutracker.download_torrent(torrent_id)
-
+    file_list = get_file_list(file_name)
+    torrent_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, str(x)))) for x in file_list]
     # Категория с торрента, или если нет - тема форума
     category_name = torrent.get("category") or forum_categories.get(tor_topic_data.get("forum_id"))
 
@@ -44,14 +63,35 @@ def process_torrent(torrent: qbittorrentapi.TorrentDictionary,
         if ok == "Ok.":
             os.remove(f"./{torrent_id}.torrent")
         else:
-            logging.warning(f"Ошибка добавления торрента {torrent_id}.torrent, статус ответа '{ok}'")
-            return False
-    return True
+            msg = f"\t*** Ошибка добавления торрента {torrent_id}.torrent, статус ответа '{ok}'"
+            logging.warning(msg)
+            print(msg)
+            return None
+    return torrent_files
+
+
+def migrate_config():
+    if not os.path.exists('config.yml'):
+        with open("config.json", "r") as f:
+            cfg = json.load(f)
+            cfg['dry run'] = cfg.pop('dry_run', False)
+            cfg['delete lost files'] = cfg.pop('delete_lost_files', False)
+            cfg['proxy for api'] = cfg.pop('proxy_for_api', False)
+            cfg['telegram'] = cfg.get('telegram', {})
+            cfg['telegram']['receiver user_id'] = cfg['telegram'].pop('receiver_user_id', None)
+            cfg['telegram']['sender bot_token'] = cfg['telegram'].pop('sender_bot_token', None)
+
+        with open("config.yml", 'w') as yml:
+            yml.write(yaml.safe_dump(cfg))
+        os.remove('config.json')
 
 
 def main():
-    with open("config.json", "r") as f:
-        config = json.load(f)
+    migrate_config()
+
+    # читаем конфиг
+    with open('config.yml') as f:
+        config = yaml.safe_load(f)
 
     rutracker = Rutracker(
         user=config["rutracker"]["user"],
@@ -60,12 +100,16 @@ def main():
         proxy=config.get("proxy"),
         forum_url=config["rutracker"]["urls"]["forum"],
         api_url=config["rutracker"]["urls"]["api"],
-        proxy_for_api=config.get("proxy_for_api"),
+        proxy_for_api=config.get("proxy for api"),
     )
+
+    new_files = []
+    lost_files = []
 
     for client in config["qbt"]["clients"]:
         new_torrents = []
         bad_status = []
+        err_torrents = []
         qbt_client = qbittorrentapi.Client(
             host=client["host"],
             port=client["port"],
@@ -79,10 +123,11 @@ def main():
 
         try:
             qbt_client.auth_log_in()
-        except qbittorrentapi.LoginFailed as e:
+        except Exception as e:
             logging.error(e)
+            print("Ошибка, подробности в файле логов")
             continue
-        msg = f"Подключились, qBittorrent: {qbt_client.app.version} Web API: {qbt_client.app.web_api_version}"
+        msg = f"qBittorrent: {qbt_client.app.version} Web API: {qbt_client.app.web_api_version}"
         logging.info(msg)
         print(msg)
 
@@ -93,19 +138,16 @@ def main():
         print("Получение расширенной информации по раздачам")
         torrents_prop = [qbt_client.torrents_properties(torrent.hash) for torrent in torrents_info]
 
-        print("Обрабатываем данные")
-        # исходные хеши раздач (для поиска новых и удалённых раздач)
-        source_hashes = [x.hash for x in torrents_info]
         # вытащим ID раздач форума из коммента
         torrents_ids = [x.comment.split("=")[-1] for x in torrents_prop]
 
         print("Получаем из API данные по раздачам")
         tor_topic_data = rutracker.get_tor_topic_data(torrents_ids)
 
-        print("Обрабатываем данные от API")
+        # print("Обрабатываем данные от API")
         # Список всех forum_id
-        forum_ids = list(set(str(tor_topic_data.get(x, {}).get("forum_id")) for x in tor_topic_data
-                             if tor_topic_data.get(x) and tor_topic_data.get(x, {}).get("forum_id")))
+        forum_ids = list(set(str(tor_topic_data.get(x, {}).get("forum_id")) for x in tor_topic_data if
+                             tor_topic_data.get(x) and tor_topic_data.get(x, {}).get("forum_id")))
         # Категории с форума
         print("Получаем из API данные по категориям")
         forum_categories = rutracker.get_forum_data(forum_ids)
@@ -121,56 +163,107 @@ def main():
                     if tor_api_data.get('info_hash') != torrent.get('infohash_v1', torrent.hash).upper():
                         logging.debug("Хеш раздачи изменился, перекачаем")
 
-                        new_torrents.append(torrent.name)
-
-                        ok = process_torrent(torrent=torrent,
-                                             torrent_id=torrent_id,
-                                             tor_topic_data=tor_api_data,
-                                             qbt_client=qbt_client,
-                                             rutracker=rutracker,
-                                             forum_categories=forum_categories,
-                                             dry_run=config["dry_run"],
-                                             )
-                        if ok:
-                            if config["dry_run"]:
+                        tor_files = process_torrent(torrent=torrent,
+                                                    torrent_id=torrent_id,
+                                                    tor_topic_data=tor_api_data,
+                                                    qbt_client=qbt_client,
+                                                    rutracker=rutracker,
+                                                    forum_categories=forum_categories,
+                                                    comment=torrents_prop[idx].comment,
+                                                    dry_run=config["dry run"],
+                                                    )
+                        if tor_files:
+                            new_torrents.append(
+                                '<a href="{comment}">{name}</a>'.format(
+                                    name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                                    comment=torrents_prop[idx].comment))
+                            qbt_files = [str(pathlib.PurePath(os.path.join(torrent.save_path, x.name))) for x in
+                                         qbt_client.torrents_files(torrent.hash)]
+                            l_lost_files = list(set(qbt_files) - set(tor_files))
+                            l_new_files = list(set(tor_files) - set(qbt_files))
+                            new_files.extend(l_new_files)
+                            lost_files.extend(l_lost_files)
+                            print('Lost files:\n\t', '\n\t'.join(l_lost_files))
+                            print('New files:\n\t', '\n\t'.join(l_new_files))
+                            if config["dry run"]:
                                 logging.warning("\t(dry run) Removed old torrent: %s" % (torrent.name,))
                             else:
                                 qbt_client.torrents_delete(delete_files=False, torrent_hashes=torrent.hash)
                                 msg = f"Removed old torrent: {torrent.name}"
                                 logging.info(msg)
                                 print(msg)
+                        else:
+                            err_torrents.append(
+                                '<a href="{comment}">{name}</a>'.format(
+                                    name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                                    comment=torrents_prop[idx].comment))
                 else:
                     logging.debug(f'Статус торрента {tor_api_data.get("tor_status")} - '
                                   f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
                                   f' имя: {torrent.name}')
+                    tor_name = '<a href="{comment}">{name}</a>'.format(
+                        name=torrent.name.replace("[", "\\[").replace("]", "\\]"),
+                        comment=torrents_prop[idx].comment)
                     bad_status.append(f'{tor_api_data.get("tor_status")} - '
                                       f'"{rutracker.statuses.get(int(tor_api_data.get("tor_status")))}"'
-                                      f' имя: {torrent.name}')
+                                      f' имя: {tor_name}'
+                                      )
             else:
-                msg = f'Торрент не найден в ответе API: {torrent.name}'
+                msg = f'({torrent.state}) Не найден в ответе API: {torrent.name} * {torrents_prop[idx].comment}'  # {torrent.magnet_uri}'
+                if torrent.state_enum.is_complete and torrent_id:
+                    print('!!! вероятно, следующую раздачу можно вытащить из архива или удалить в клиенте !!!')
+                    print(msg)
                 logging.info(msg)
-                print(msg)
 
         # уведомление в телеграм
         cfg_telegram = config.get("telegram")
-        if cfg_telegram and cfg_telegram.get("receiver_user_id"):
+        if cfg_telegram and cfg_telegram.get("receiver user_id"):
             client_name = client["host"] + ":" + str(client["port"])
             if len(new_torrents):
                 send_tlg(
-                    cfg_telegram.get("sender_bot_token"),
-                    cfg_telegram.get("receiver_user_id"),
+                    cfg_telegram.get("sender bot_token"),
+                    cfg_telegram.get("receiver user_id"),
                     client_name + ": Перекачанные раздачи:",
                     new_torrents
                 )
-            if len(bad_status) > 0:
+            if len(err_torrents):
                 send_tlg(
-                    cfg_telegram.get("sender_bot_token"),
-                    cfg_telegram.get("receiver_user_id"),
+                    cfg_telegram.get("sender bot_token"),
+                    cfg_telegram.get("receiver user_id"),
+                    client_name + ": Ошибка при добавлении торрента:",
+                    err_torrents
+                )
+            if len(bad_status):
+                send_tlg(
+                    cfg_telegram.get("sender bot_token"),
+                    cfg_telegram.get("receiver user_id"),
                     client_name + ': "Плохие" статусы раздач:',
                     bad_status
                 )
         print("***")
 
+    cfg_telegram = config.get("telegram")
+    if cfg_telegram and cfg_telegram.get("receiver user_id"):
+        if len(new_files):
+            send_tlg(
+                cfg_telegram.get("sender bot_token"),
+                cfg_telegram.get("receiver user_id"),
+                "Новые файлы:",
+                new_files
+            )
+        if len(lost_files):
+            send_tlg(
+                cfg_telegram.get("sender bot_token"),
+                cfg_telegram.get("receiver user_id"),
+                'Потерянные файлы:',
+                lost_files
+            )
+    if config.get("delete lost files"):
+        for i in lost_files:
+            os.remove(i)
+            msg = f'Удалили {i}'
+            logging.info(msg)
+            print(msg)
     logging.debug("Выход")
 
 
@@ -184,7 +277,7 @@ if __name__ == "__main__":
 
     logger.setLevel(logging.DEBUG)
 
-    f_handler = logging.FileHandler("./logs/" + time.strftime("%y%m%d-%H%M.log"), encoding="utf-8")
+    f_handler = handlers.TimedRotatingFileHandler("./logs/log.txt", "D", interval=1, backupCount=7, encoding="utf-8")
     f_formatter = logging.Formatter(u"%(filename)-.10s[Ln:%(lineno)-3d]%(levelname)-8s[%(asctime)s]|%(message)s")
     f_handler.setFormatter(f_formatter)
     f_handler.setLevel(logging.DEBUG)
