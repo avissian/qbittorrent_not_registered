@@ -138,6 +138,7 @@ class Rutracker:
             params["val"] = ",".join(val[i:i + self._api_limit])
             try:
                 resp = self._session_api.get(url=url, params=params, allow_redirects=True)
+                logging.debug(resp.content)
             except Exception as e:
                 logging.error(e)
                 continue

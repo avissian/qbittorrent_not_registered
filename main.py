@@ -134,9 +134,11 @@ def main():
         # получаем список раздач из кубита
         print("Получаем список раздач")
         torrents_info = qbt_client.torrents_info()
+        logger.debug(f'torrents_info={torrents_info}')
         # чуть больше инфы по раздачам из кубита
         print("Получение расширенной информации по раздачам")
         torrents_prop = [qbt_client.torrents_properties(torrent.hash) for torrent in torrents_info]
+        logger.debug(f'torrents_prop={torrents_prop}')
 
         # вытащим ID раздач форума из коммента
         torrents_ids = [x.comment.split("=")[-1] for x in torrents_prop]
@@ -277,10 +279,14 @@ if __name__ == "__main__":
 
     logger.setLevel(logging.DEBUG)
 
-    f_handler = handlers.TimedRotatingFileHandler("./logs/log.txt", "D", interval=1, backupCount=7, encoding="utf-8")
+    f_handler = handlers.TimedRotatingFileHandler("./logs/log.txt", "D", interval=1, backupCount=3, encoding="utf-8")
     f_formatter = logging.Formatter(u"%(filename)-.10s[Ln:%(lineno)-3d]%(levelname)-8s[%(asctime)s]|%(message)s")
     f_handler.setFormatter(f_formatter)
     f_handler.setLevel(logging.DEBUG)
     logger.addHandler(f_handler)
     #
-    main()
+    try:
+        main()
+    except Exception as e:
+        logging.error(e)
+        raise
